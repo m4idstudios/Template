@@ -1,0 +1,139 @@
+plugins {
+    id("mod-platform")
+    id("dev.kikugie.loom-back-compat")
+    id("org.jetbrains.kotlin.jvm")
+    id("org.jetbrains.kotlin.plugin.serialization")
+    `maven-publish`
+}
+
+sourceSets.named("main") {
+    java.srcDir(rootProject.file("fabric/src/main/java"))
+    resources.srcDir(rootProject.file("fabric/src/main/resources"))
+}
+
+base {
+    archivesName = prop("mod.id")
+}
+
+val jvmTargetVersion = when {
+    sc.current.parsed >= "26.1" -> 25
+    sc.current.parsed >= "1.20.5" -> 21
+    else -> 17
+}
+
+java {
+    toolchain {
+        languageVersion.set(JavaLanguageVersion.of(jvmTargetVersion))
+    }
+}
+
+tasks.withType<org.jetbrains.kotlin.gradle.tasks.KotlinCompile>().configureEach {
+    compilerOptions {
+        jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.fromTarget(jvmTargetVersion.toString()))
+    }
+}
+
+tasks.withType<JavaCompile>().configureEach {
+    options.release.set(jvmTargetVersion)
+}
+
+group = prop("mod.group")
+version = prop("mod.version")
+
+publishing {
+    publications {
+        create<MavenPublication>("maven") {
+            from(components["java"])
+
+            artifactId = sc.current.project
+        }
+    }
+}
+
+stonecutter {
+    val (version, loader) = current.project.split('-', limit = 2)
+    properties.tags(version, loader)
+
+    replacements.string(current.parsed >= "1.21.11") {
+        replace("WorldRenderEvents", "LevelRenderEvents")
+        replace("ClientCommandManager", "ClientCommands")
+    }
+    replacements.string(current.parsed >= "26.1.2") {
+        replace("FabricDataOutput", "FabricPackOutput")
+    }
+}
+
+platform {
+    loader = "fabric"
+    dependencies {
+        required("minecraft") {
+            fabricLikeVersionRange = prop("deps.minecraft")
+        }
+        required("fabric-api") {
+            slug("fabric-api")
+            fabricLikeVersionRange = ">=${prop("deps.fabric-api")}"
+        }
+        required("fabricloader") {
+            fabricLikeVersionRange = ">=${prop("deps.fabric-loader")}"
+        }
+        optional("modmenu") {}
+    }
+}
+
+loom {
+    accessWidenerPath = rootProject.file("fabric/src/main/resources/${sc.current.version}.accesswidener")
+    runs.named("client") {
+        client()
+        ideConfigGenerated(true)
+        runDir = "run/"
+        environment = "client"
+        programArgs("--username=Dev")
+        configName = "Fabric Client"
+    }
+    runs.named("server") {
+        server()
+        ideConfigGenerated(true)
+        runDir = "run/"
+        environment = "server"
+        configName = "Fabric Server"
+    }
+}
+
+fabricApi {
+    configureDataGeneration {
+        outputDirectory = file("${rootDir}/versions/datagen/${sc.current.version.split("-")[0]}/src/main/generated")
+        client = true
+    }
+}
+
+repositories {
+    mavenCentral()
+
+    maven("https://jitpack.io")
+
+    strictMaven("https://maven.terraformersmc.com/", "com.terraformersmc") { name = "TerraformersMC" }
+    strictMaven("https://api.modrinth.com/maven", "maven.modrinth") { name = "Modrinth" }
+}
+
+configurations.all {
+    resolutionStrategy {
+        force("net.fabricmc:fabric-loader:${prop("deps.fabric-loader")}")
+    }
+}
+
+dependencies {
+    minecraft("com.mojang:minecraft:${prop("deps.minecraft")}")
+
+    if (sc.current.parsed < "26") {
+        mappings(loom.layered {
+            officialMojangMappings()
+            if (hasProperty("deps.parchment"))
+                parchment("org.parchmentmc.data:parchment-${prop("deps.parchment")}@zip")
+        })
+    }
+
+    modImplementation("net.fabricmc:fabric-loader:${prop("deps.fabric-loader")}")
+    modImplementation("net.fabricmc.fabric-api:fabric-api:${prop("deps.fabric-api")}")
+
+    implementation("com.github.DoctorM4id.M4id:${prop("deps.minecraft")}-fabric:${prop("deps.m4id")}")
+}
