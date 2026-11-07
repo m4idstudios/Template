@@ -12,7 +12,8 @@ object Example {
 
     val Logger: Logger = LogManager.getLogger(MOD_FRIENDLY_NAME)
 
-    fun idOf(unique: String) = ResourceLocation(MOD_ID, unique)
+    // TODO: Fix later
+    //fun idOf(unique: String) = ResourceLocation(MOD_ID, unique)
 
     fun onInitialize() {
         Logger.info( "Initializing {} on {}", MOD_ID, M4id.SharedApi.platform )
